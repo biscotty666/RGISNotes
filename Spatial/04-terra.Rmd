@@ -1,0 +1,198 @@
+---
+title: "04-terra.Rmd"
+output: html_document
+date: "2025-03-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Terra package
+
+```{r}
+library(terra)
+library(ggplot2)
+library(tidyterra)
+```
+
+> terra classes:
+>
+> -   `SpatRaster`
+> -   `SpatVector`
+
+## Raster data
+
+> -   `rast()` to create and read rasters
+> -   `writeRaster()` to write data
+
+```{r}
+pathraster = system.file("ex/elev.tif", package = "terra")
+r = rast(pathraster)
+plot(r)
+```
+
+```{r}
+r <- rast(ncol = 10, nrow = 10, 
+          xmin = -150, xmax = -80, 
+          ymin = 20, ymax = 60)
+r
+```
+
+> get and set values with `values()`
+
+```{r}
+values(r) <- 1:ncell(r)
+values(r)
+```
+
+> Multilayer
+
+```{r}
+r2 <- r * r
+s <- c(r, r2)
+```
+
+```{r}
+plot(s[[2]])
+```
+
+```{r}
+plot(min(s))
+plot(r + r + 10)
+plot(round(r))
+plot(r == 1)
+```
+
+## Vector data
+
+> -   `vect()` to read a shapefile
+> -   `writeVector()` to write to a file
+
+```{r}
+pathshp <- system.file("ex/lux.shp", package = "terra")
+v <- vect(pathshp)
+```
+
+> Create a `SpatVector`
+
+```{r}
+long <- c(-0.118092, 2.349014, -3.703339, 12.496366)
+lat <- c(51.509865, 48.864716, 40.416729, 41.902782)
+longlat <- cbind(long, lat)
+
+crspoints <- "+proj=longlat +datum=WGS84"
+
+d <- data.frame(
+  place = c("London", "Paris", "Madrid", "Rome"), 
+  value = c(200, 300, 400, 500)
+)
+
+pts <- vect(longlat, atts = d, crs = crspoints)
+
+pts
+plot(pts)
+```
+
+## Cropping, masking and aggregating
+
+First, we use the `worldclim_country()` function of the **geodata** package ([Hijmans et al. 2023](https://www.paulamoraga.com/book-spatial/references.html#ref-R-geodata)) to download global temperature data from the [WorldClim](https://www.worldclim.org/data/index.html) database. Specifically, we download monthly average temperature in degree Celsius by specifying the country (`country = "Spain"`), the variable mean temperature (`var = "tavg"`), the resolution (`res = 10`), and the path where to download the data to as a temporary file (`path = tempdir()`). Figure [4.2](https://www.paulamoraga.com/book-spatial/the-terra-package-for-raster-and-vector-data.html#fig:terratemp) shows maps of the monthly average temperature in Spain.
+
+```{r}
+r <- geodata::worldclim_country(country = "Spain", var = "tavg", 
+                                res = 10, path = tempdir())
+plot(r)
+```
+
+```{r}
+r <- mean(r)
+plot(r)
+```
+
+> Download Spain but remove Canary Islands
+
+```{r}
+map <- rnaturalearth::ne_states("Spain", returnclass = "sf")
+map <- map[-which(map$region == "Canary Is."), ]
+ggplot(map) + geom_sf()
+```
+
+> Crop to the original to the spatial extent of the map
+
+```{r}
+sextent <- terra::ext(map)
+r <- terra::crop(r, sextent)
+plot(r)
+```
+
+> Mask values outside to NA
+
+```{r}
+r <- terra::mask(r, vect(map))
+plot(r)
+```
+
+> Aggregate to lower resolution
+
+```{r}
+r <- terra::aggregate(r, fact = 20, fun = "mean", na.rm = T)
+plot(r)
+```
+
+## Extracting values at points
+
+Here, we provide an example of the use of [`extract()`](https://rdrr.io/pkg/terra/man/extract.html) using a raster representing the elevation of Luxembourg, and a vector file with the divisions of Luxembourg from files in the **terra** package.
+
+```{r}
+lrast <- rast(system.file("ex/elev.tif", package = "terra"))
+lpolys <- vect(system.file("ex/lux.shp", package = "terra"))
+```
+
+```{r}
+points <- crds(centroids(lpolys))
+```
+
+```{r}
+plot(lrast)
+plot(lpolys, add = T)
+points(points)
+```
+
+```{r}
+points <- as.data.frame(points)
+values_at_points <- extract(lrast, points)
+cbind(points, values_at_points)
+```
+
+## Extract and average (Polygons)
+
+```{r}
+head(extract(lrast, lpolys, na.rm = T))
+```
+
+```{r}
+# Extracted raster cells and percentage of area
+# covered within each polygon
+head(extract(lrast, lpolys, na.rm = TRUE, weights = TRUE))
+```
+
+```{r}
+lpolys$avg <- extract(lrast, lpolys, mean, na.rm = T)$elevation
+```
+
+The area-weighted average raster values by polygon are obtained with [`extract()`](https://rdrr.io/pkg/terra/man/extract.html) setting `weights = TRUE`.
+
+```{r}
+lpolys$weightedavg <- extract(lrast, lpolys, mean,
+                              na.rm = T, weights = T)$elevation
+```
+
+```{r}
+lpolys |> ggplot() +
+  geom_spatvector(aes(fill = avg)) +
+  scale_fill_terrain_c()
+
+lpolys |> ggplot() +
+  geom_spatvector(aes(fill = weightedavg)) +
+  scale_fill_terrain_c()
+```
