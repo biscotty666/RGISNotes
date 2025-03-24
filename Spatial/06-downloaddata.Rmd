@@ -1,0 +1,239 @@
+---
+title: "06-DownloadSpatialData"
+output: html_document
+date: "2025-03-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Downloading spatial data
+
+## Administrative boundaries
+
+> see also `tidycensus`, `tigris`, `giscoR`
+
+The [`ne_countries()`](https://docs.ropensci.org/rnaturalearth/reference/ne_countries.html) function allows us to download the map of the country specified in argument `country`, of scale given in `scale`, and of class `sp` or `sf` given in `returnclass`. We can retrieve the possible names that can be specified in argument `country` by typing `ne_countries()$admin`. The [`ne_states()`](https://docs.ropensci.org/rnaturalearth/reference/ne_states.html) function can be used to obtain administrative divisions for specific countries.
+
+```{r}
+library(rnaturalearth)
+library(sf)
+library(ggplot2)
+library(viridis)
+library(patchwork)
+```
+
+```{r}
+map_de1 <- ne_countries(type = "countries", country = "Germany", 
+                     scale = "medium", returnclass = "sf")
+map_de2 <- ne_states("Germany", returnclass = "sf")
+p1 <- ggplot(map_de1) + geom_sf()
+p2 <- ggplot(map_de2) + geom_sf()
+p1 + p2
+```
+
+```{r}
+map_uk1 <- ne_countries(type = "countries", country = "United Kingdom", 
+                     scale = "medium", returnclass = "sf")
+map_uk2 <- ne_states("United Kingdom", returnclass = "sf")
+p1 <- ggplot(map_uk1) + geom_sf()
+p2 <- ggplot(map_uk2) + geom_sf()
+p1 + p2
+```
+
+## Climate data
+
+For example, the [`worldclim_country()`](https://rdrr.io/pkg/geodata/man/worldclim.html) function downloads climate data from [WorldClim](https://www.worldclim.org/) including minimum temperature (`tmin`), maximum temperature (`tmax`), average temperature (`tavg`), precipitation (`prec`), and wind speed (`wind`). The [`country_codes()`](https://rdrr.io/pkg/geodata/man/countries.html) function of **geodata** can be used to get the names and codes of the world countries. Here, we provide an example on how to download minimum temperature in Jamaica using [`worldclim_country()`](https://rdrr.io/pkg/geodata/man/worldclim.html) specifying `country = "Jamaica"`, `var = "tmin"` and `path = tempdir()` as the path name of the temporary directory to download the data. This function retrieves the temperature for each month, and we can plot the mean over the months with `mean(d)` (Figure [6.2](https://www.paulamoraga.com/book-spatial/r-packages-to-download-open-spatial-data.html#fig:opengeodata)).
+
+```{r}
+library(geodata)
+d <- worldclim_country(country = "Jamaica", var = "tmin", 
+                       path = tempdir())
+terra::plot(mean(d), plg = list(title = "Min. temp (C)"))
+```
+
+```{r}
+d <- worldclim_country(country = "Canada", var = "tmin", 
+                       path = tempdir())
+terra::plot(mean(d), plg = list(title = "Min. temp (C)"))
+```
+
+```{r}
+d <- worldclim_country(country = "Mexico", var = "tmin", 
+                       path = tempdir())
+terra::plot(mean(d), plg = list(title = "Min. temp (C)"))
+```
+
+```{r}
+d <- worldclim_country(country = "Mexico", var = "tmin", 
+                       path = tempdir())
+terra::plot(mean(d), plg = list(title = "Min. temp (C)"))
+```
+
+## Precipitation
+
+The **chirps** package ([de Sousa, Sparks, and Ghosh 2022](https://www.paulamoraga.com/book-spatial/references.html#ref-R-chirps)) allows us to obtain daily high-resolution precipitation, as well as daily maximum and minimum temperatures from the [Climate Hazards Group](https://www.chc.ucsb.edu/). We use the [`get_chirps()`](https://docs.ropensci.org/chirps/reference/get_chirps.html) function to obtain daily precipitation in Bangkok, Thailand, by specifying the longitude and latitude coordinates of Bangkok, the dates, and the server source. Here, we use the `"ClimateSERV"` server instead of the default server `"CHC"`, since it is recommended when few data points are required (Figure [**??**](https://www.paulamoraga.com/book-spatial/r-packages-to-download-open-spatial-data.html#fig:openchirpsimg)).
+
+```{r}
+library(chirps)
+location <- data.frame(long = 100.523186, lat = 13.736717)
+d <- get_chirps(location, dates = c("2020-01-01", "2022-12-31"), 
+                server = "ClimateSERV")
+```
+
+```{r}
+ggplot(d, aes(x = date, y = chirps)) + geom_line() +
+  labs(y = "Precipitation (mm")
+```
+
+```{r}
+location <- data.frame(long = -106.65114, lat = 35.08449)
+d <- get_chirps(location, dates = c("2020-01-01", "2024-12-31"), 
+                server = "ClimateSERV")
+```
+
+```{r}
+ggplot(d, aes(x = date, y = chirps)) + geom_line() +
+  labs(y = "Precipitation (mm)") + ggtitle("Albuquerque Precipitation")
+```
+
+## Elevation
+
+The **elevatr** package ([Hollister 2022](https://www.paulamoraga.com/book-spatial/references.html#ref-R-elevatr)) allows us to get elevation data from [Amazon Web Services (AWS) Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) and [OpenTopography Global Digital Elevation Models API](https://portal.opentopography.org/apidocs/#/Public/getGlobalDem). The [`get_elev_raster()`](https://rdrr.io/pkg/elevatr/man/get_elev_raster.html) function can be used to download elevation at the locations specified in argument `locations` and with a zoom specified in argument `z`. Argument `clip` can be set to `"tile"` to return full tiles, `"bbox"` to return data clipped to the bounding box of the locations, or `"locations"` to return data clipped to the data specified in `locations`. Figure [6.4](https://www.paulamoraga.com/book-spatial/r-packages-to-download-open-spatial-data.html#fig:openelevatr) shows the elevation of Switzerland downloaded passing to [`get_elev_raster()`](https://rdrr.io/pkg/elevatr/man/get_elev_raster.html) a `sf` object with the map of the country.
+
+```{r}
+library(rnaturalearth)
+library(elevatr)
+library(terra)
+```
+
+```{r}
+map <- ne_countries(type = "countries", country = "Switzerland", 
+                    scale = "medium", returnclass = "sf")
+d <- get_elev_raster(locations = map, z = 9, clip = "locations")
+terra::plot(rast(d), plg = list(title="Elevation (m)"))
+```
+
+```{r}
+map <- ne_countries(type = "countries", country = "Guatemala", 
+                    scale = "medium", returnclass = "sf")
+d <- get_elev_raster(locations = map, z = 9, clip = "locations")
+terra::plot(rast(d), plg = list(title="Elevation (m)"))
+```
+
+## OpenStreetMap
+
+```{r}
+library(osmdata)
+head(available_features())
+head(available_tags("amenity"))
+```
+
+> Create a bounding box
+
+```{r}
+barcelonabb <- getbb("Barcelona")
+barcelonabb
+```
+
+```{r}
+abqbb <- getbb("Albuquerque")
+abqbb
+```
+
+To retrieve the required features of a place defined by the bounding box, we need to create an overpass query with [`opq()`](https://docs.ropensci.org/osmdata/reference/opq.html). Then, the [`add_osm_feature()`](https://docs.ropensci.org/osmdata/reference/add_osm_feature.html) function can be used to add the required features to the query. Finally, we use the [`osmdata_sf()`](https://docs.ropensci.org/osmdata/reference/osmdata_sf.html) function to obtain a simple feature object of the resultant query.
+
+```{r}
+hospitals <- barcelonabb |> 
+  opq() |> 
+  add_osm_feature(key = "amenity", value = "hospital") |> 
+  osmdata_sf()
+hospitals_barc <- hospitals
+hospitals_abq <- abqbb |> opq() |> 
+  add_osm_feature(key = "amenity", value = "hospital") |> 
+  osmdata_sf()
+```
+
+```{r}
+motorways_barc <- barcelonabb %>% opq() %>%
+  add_osm_feature(key = "highway", value = "motorway") %>%
+  osmdata_sf()
+motorways_abq <- abqbb %>% opq() %>%
+  add_osm_feature(key = "highway", value = "motorway") %>%
+  osmdata_sf()
+```
+
+```{r}
+library(leaflet)
+leaflet() |> addTiles() |> 
+  addPolylines(data = motorways_barc$osm_lines, color = "black") |> 
+  addPolygons(data = hospitals_barc$osm_polygons, 
+              label = hospitals_barc$osm_polygons$name)
+```
+
+```{r}
+leaflet() |> addTiles() |> 
+  addPolylines(data = motorways_abq$osm_lines, color = "black") |> 
+  addPolygons(data = hospitals_abq$osm_polygons, 
+              label = hospitals_abq$osm_polygons$name)
+```
+
+## World Bank data
+
+```{r}
+library(wbstats)
+indicators <- wb_search(pattern = "poverty|unemployment")
+```
+
+```{r}
+View(indicators)
+```
+
+For example, here we download Human Development Index which has ID `MO.INDEX.HDEV.XQ` in 2011.
+
+```{r}
+d <- wb_data(indicator = "MO.INDEX.HDEV.XQ", 
+            start_date = 2011, end_date = 2011)
+print(head(d))
+```
+
+```{r}
+library(rnaturalearth)
+library(mapview)
+map <- ne_countries(continent = "Africa", returnclass = "sf")
+map <- dplyr::left_join(map, d, by = c("iso_a3" = "iso3c"))
+mapview(map, zcol = "MO.INDEX.HDEV.XQ")
+```
+
+## Species occurrence
+
+he **spocc** package ([Chamberlain 2021](https://www.paulamoraga.com/book-spatial/references.html#ref-R-spocc)) is an interface to many species occurrence data sources including Global Biodiversity Information Facility (GBIF), USGSs\' Biodiversity Information Serving Our Nation (BISON), iNaturalist, eBird, Integrated Digitized Biocollections (iDigBio), VertNet, Ocean Biogeographic Information System (OBIS), and Atlas of Living Australia (ALA). The package provides functionality to retrieve and combine species occurrence data.
+
+The [`occ()`](https://docs.ropensci.org/spocc/reference/occ.html) function from **spocc** can be used to retrieve the locations of species. Here, we download data on brown-throated sloths in Costa Rica recorded between 2000 and 2019 from the GBIF database. Arguments of this function include `query` with the species scientific name (*Bradypus variegatus*), `from` with the name of the database (GBIF), and `date` with the start and end dates (2000-01-01 to 2019-12-31). We also specify that we wish to retrieve occurrences in Costa Rica by setting `gbifopts` to a named list with country equal to the 2-letter code of Costa Rica (CR). Moreover, we only retrieve occurrence data that have coordinates by setting `has_coords = TRUE`, and specify limit equal to 1000 to retrieve a maximum of 1000 occurrences.
+
+```{r}
+library(spocc)
+df <- occ(query = "Bradypus variegatus", from = "gbif", 
+          date = c("2000-01-01", "2019-12-31"), 
+          gbifopts = list(country = "CR"), 
+          has_coords = T, limit = 1000)
+d <- occ2df(df)
+```
+
+```{r}
+d <- st_as_sf(d, coords = c("longitude", "latitude"))
+st_crs(d) <- 4326
+mapview(d)
+```
+
+```{r}
+df <- occ(query = "Antigone canadensis", from = "gbif", 
+          date = c("2000-01-01", "2019-12-31"), 
+          gbifopts = list(country = "US"), 
+          has_coords = T, limit = 1000)
+d <- occ2df(df)
+d <- st_as_sf(d, coords = c("longitude", "latitude"))
+st_crs(d) <- 4326
+mapview(d)
+```
