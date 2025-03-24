@@ -1,0 +1,251 @@
+---
+title: "05-maps"
+output: html_document
+date: "2025-03-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(sf)
+```
+
+# Making Maps
+
+The areal data we map correspond to sudden infant deaths in the counties of North Carolina, USA, in 1974 and 1979 which are in the **sf** package ([Pebesma 2022a](https://www.paulamoraga.com/book-spatial/references.html#ref-R-sf)).
+
+```{r}
+nameshp <- system.file("shape/nc.shp", package = "sf")
+d <- st_read(nameshp, quiet = T)
+d$vble <- d$SID74
+d$vble2 <- d$SID79
+```
+
+## ggplot2
+
+```{r}
+library(ggplot2)
+library(viridis)
+ggplot(d) + geom_sf(aes(fill = vble)) +
+  scale_fill_viridis() + theme_bw()
+```
+
+```{r}
+png("plot.png")
+ggplot(d) + geom_sf(aes(fill = vble)) +
+  scale_fill_viridis() + theme_bw()
+dev.off()
+```
+
+```{r}
+ggplot(d) + geom_sf(aes(fill = vble)) +
+  scale_fill_viridis() + theme_bw()
+```
+
+```{r}
+library(plotly)
+g <- ggplot(d) + geom_sf(aes(fill = vble))
+plotly::ggplotly(g)
+```
+
+## leaflet
+
+```{r}
+st_crs(d)$epsg
+```
+
+```{r}
+d <- st_transform(d, 4326)
+```
+
+-   create color palette mapped to vble
+-   create map with `leaflet()` and `addTiles()` for background
+-   use `addPolygons()` for counties
+-   add legend
+
+```{r}
+library(leaflet)
+pal <- colorNumeric(palette = "YlOrRd", domain = d$vble)
+l <- leaflet(d) |> addTiles() |> 
+  addPolygons(color = "white", fillColor = ~ pal(vble), 
+              fillOpacity = 0.8) |> 
+  addLegend(pal = pal, values = ~vble, opacity = 0.8)
+l
+```
+
+```{r}
+l |> addMiniMap()
+```
+
+```{r}
+library(htmlwidgets)
+saveWidget(widget = l, file = "map.html")
+```
+
+## mapview
+
+```{r}
+library(mapview)
+mapview(d, zcol = "vble")
+```
+
+```{r}
+library(RColorBrewer)
+pal <- colorRampPalette(brewer.pal(9, "YlOrRd"))
+mapview(d, zcol = "vble", map.types = "CartoDB.DarkMatter", 
+        col.regions = pal, layer.name = "SDI")
+```
+
+```{r}
+map1 <- mapview(d, zcol = "vble")
+leaflet::addMiniMap(map1@map)
+```
+
+## mapview - side by side
+
+```{r}
+library(leaflet.extras2)
+pal <- colorRampPalette(brewer.pal(9, "YlOrRd"))
+```
+
+> -   Create a common legend
+> -   Create maps
+> -   Display with pipe
+
+```{r}
+at <- seq(min(c(d$vble, d$vble2)), max(c(d$vble, d$vble2)), 
+              length.out = 8)
+
+m1 <- mapview(d, zcol = "vble", map.types = "CartoDB.Voyager", 
+              col.retions = pal, at = at)
+m2 <- mapview(d, zcol = "vble2", map.types = "CartoDB.Voyager", 
+              col.retions = pal, at = at)
+m1 | m2
+```
+
+## leafsync
+
+```{r}
+m <- leafsync::sync(m1, m2)
+m
+```
+
+```{r}
+htmltools::save_html(m, "m.html")
+```
+
+## tmap
+
+```{r}
+library(tmap)
+tmap_mode("plot")
+tm_shape(d) + tm_polygons("vble")
+```
+
+## Point data
+
+```{r}
+library(maps)
+d <- world.cities
+d <- d[which(d$country.etc == "South Africa"), ]
+d <- st_as_sf(d, coords = c("long", "lat"))
+st_crs(d) <- 4326
+```
+
+```{r}
+d1 <- world.cities[which(world.cities$country.etc == "South Africa"), ] |> 
+  st_as_sf(coords = c("long", "lat"))
+```
+
+```{r}
+d$population <- d$pop
+d$size <- sqrt(d$pop) / 100
+```
+
+```{r}
+ggplot(d) +
+  geom_sf(aes(col = population, size = size)) +
+  scale_color_viridis()
+```
+
+```{r}
+pal <- colorNumeric(palette = "viridis", domain = d$population)
+leaflet(d) |> 
+  addTiles() |> 
+  addCircles(lng = st_coordinates(d)[, 1], 
+             lat = st_coordinates(d)[, 2], 
+             radius = ~sqrt(population)*10, 
+             color = ~pal(population), popup = ~name) |> 
+  addLegend(pal = pal, values = ~population, position = "bottomright")
+```
+
+```{r}
+d$size = sqrt(d$population)
+mapview(d, zcol = "population", cex = "size")
+```
+
+```{r}
+tmap_mode("view")
+tm_shape(d) + tm_dots("population", scale = sqrt(d$population)/500, 
+                      palette = "viridis")
+```
+
+## Raster data
+
+```{r}
+library(terra)
+r <- rast(system.file("ex/elev.tif", package = "terra"))
+```
+
+```{r}
+d <- st_as_sf(as.data.frame(r, xy = T), coords = c("x", "y"))
+st_crs(d) <- 4326
+ggplot(d) + geom_sf() +
+  geom_raster(data = as.data.frame(r, xy = T), 
+              aes(x = x, y = y, fill = elevation))
+```
+
+To use the **leaflet** and **mapview** packages, we transform the data from class `terra` to `RasterLayer` with the [`raster::brick()`](https://rdrr.io/pkg/raster/man/brick.html) function. Figure [5.11](https://www.paulamoraga.com/book-spatial/making-maps-with-r.html#fig:mapsrasterleaflet) shows the map of raster data created with **leaflet**.
+
+```{r}
+library(raster)
+rb <- raster::brick(r)
+
+pal <- colorNumeric("YlOrRd", values(r), 
+                    na.color = "transparent")
+leaflet() |> 
+  addTiles() |> 
+  addRasterImage(rb, colors = pal, opacity = 0.8) |> 
+  addLegend(pal = pal, values = values(r), title = "elevation")
+```
+
+```{r}
+mapview(rb, layer = "elevation")
+```
+
+## Mobility flows
+
+```{r}
+library(flowmapblue)
+locations <- data.frame(
+id = c(1, 2, 3),
+name = c("New York", "London", "Rio de Janeiro"),
+lat = c(40.713543, 51.507425, -22.906241),
+lon = c(-74.011219, -0.127738, -43.180244)
+)
+```
+
+```{r}
+flows <- data.frame(
+  origin = c(1, 2, 3, 2, 1, 3),
+  dest = c(2, 1, 1, 3, 3 , 2),
+  count = c(42, 51, 50, 40, 22, 42)
+  )
+```
+
+```{r}
+flowmapblue(locations, flows, mapboxAccessToken = NULL,
+            clustering = TRUE, darkMode = TRUE, animation = FALSE)
+```

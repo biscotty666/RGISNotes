@@ -1,6 +1,7 @@
 .envrc
 .direnv
-GeocompR.Rproj
+*.Rproj
 .RData
 .Rhistory
 .Rproj.user
+**/lib
