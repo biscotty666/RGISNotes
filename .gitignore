@@ -5,3 +5,5 @@
 .Rhistory
 .Rproj.user
 **/lib
+Spatial/exdata
+Spatial/test

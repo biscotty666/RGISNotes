@@ -32,6 +32,8 @@
             rPackages.devtools
             rPackages.flowmapblue
             rPackages.tidycensus
+            rPackages.tidygeocoder
+            rPackages.trajr
             rPackages.worldbank
             rPackages.wbstats
             rPackages.spocc
