@@ -1,6 +1,6 @@
 {
   description = "A basic flake with a shell";
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/25.05";
   inputs.systems.url = "github:nix-systems/default";
   inputs.flake-utils = {
     url = "github:numtide/flake-utils";
@@ -13,61 +13,80 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        
+   #    r-inla = pkgs.rPackages.buildRPackage {
+   #      name = "R-INLA";
+   #      src = pkgs.fetchFromGitHub{
+   #        owner = "hrue";
+   #        repo = "r-inla";
+   #        rev = "daf931c988cadd7567c07cae23ff75eb7e6ad02d";
+   #        sha256 = "1ll6azffga02kxqygalj4d03xplj7xb98qjwrdm7v17lznlamvx9";
+   #      };
+   # propagatedBuildInputs = with pkgs.rPackages; [bslib evaluate Matrix sp INLAspacetime fmesher jsonlite knitr stringr tinytex yaml xfun];
+   #    };
       in
       {
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = [ pkgs.bashInteractive ];
           buildInputs = with pkgs; [
             R
-            rPackages.pagedown
-            rPackages.tidyverse
-            rPackages.sf
-            rPackages.terra
-            rPackages.leaflet
-            rPackages.leaflet_extras
-            rPackages.leaflet_extras2
-            rPackages.leafsync
-            rPackages.spdep
-            rPackages.maps
-            rPackages.devtools
-            rPackages.flowmapblue
-            rPackages.tidycensus
-            rPackages.tidygeocoder
-            rPackages.trajr
-            rPackages.worldbank
-            rPackages.wbstats
-            rPackages.spocc
-            rPackages.chirps
-            rPackages.elevatr
-            rPackages.patchwork
-            rPackages.XML
-            rPackages.rnaturalearth
-            rPackages.rnaturalearthdata
-            rPackages.osmdata
-            rPackages.lwgeom
-            rPackages.rmapshaper
-            rPackages.rcartocolor
-            rPackages.shiny
-            rPackages.mapview
-            rPackages.mapdeck
-            rPackages.ggspatial
-            rPackages.cartogram
-#            rPackages.USAboundaries
-            rPackages.gifski
-            rPackages.historydata
-            rPackages.viridis
-            rPackages.tmap
-            rPackages.plotly
-            rPackages.geodata
-            rPackages.tidyterra
-            rPackages.htmlwidgets
-            rPackages.webshot
-            rPackages.spData
-            rPackages.codetools
             chromium
             pandoc
+            # r-inla
             texlive.combined.scheme-full
             rstudio
+            (with rPackages; [
+              RColorBrewer
+              SpatialEpi
+              basemaps
+              chirps
+              dismo
+              dodgr
+              elevatr
+              flowmapblue
+              forcats
+              gapminder
+              geoR
+              geodata
+              geodist
+              ggspatial
+              ggiraph
+              ggmap
+              ggpattern
+              gstat
+              htmlwidgets
+              janitor
+              leaflet
+              leaflet_extras
+              leaflet_extras2
+              leafpop
+              leafsync
+              maps
+              mapview
+              osmdata
+              pagedown
+              patchwork
+              plotly
+              raster
+              rcartocolor
+              rmapshaper
+              rnaturalearth
+              rnaturalearthdata
+              scales
+              sf
+              shiny
+              sp
+              spData
+              spdep
+              terra
+              thematic
+              tidycensus
+              tidygeocoder
+              tidyterra
+              tidyverse
+              tmap
+              viridis
+            ])
           ];
         };
       }

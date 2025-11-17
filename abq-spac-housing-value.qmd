@@ -1,0 +1,280 @@
+---
+title: "Bernalillo County Spatial Autocorrelation Housing Value"
+format: gfm
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+# Albuquerque Housing Values
+
+```{r}
+#| message: false
+library(tidycensus)
+library(ggplot2)
+library(dplyr)
+library(sf)
+library(spdep)
+library(scales)
+library(leaflet)
+options(tigris_use_cache = TRUE)
+```
+
+```{r}
+api_key <- Sys.getenv("CENSUS_API_KEY")
+```
+
+```{r}
+bern <- get_acs(
+  geography = "tract", 
+  variables = "B25077_001", 
+  state = "NM", 
+  county = "Bernalillo",
+  year = 2023,
+  geometry = TRUE
+)
+```
+
+```{r bern-house-val-sac-1}
+ggplot(bern, aes(fill = estimate)) +
+  geom_sf() +
+  labs(title = "Bernalillo County Median House Value", 
+       caption = "Data Source US Census Bureau 5-year ACS", 
+       fill = "ACS estimate") +
+  coord_sf(xlim = c(-106.7, -106.49), ylim = c(35.0, 35.225)) +
+  scale_fill_distiller(palette = "BuGn",
+                       direction = 1,
+                       labels = unit_format(unit = "K", scale = 1e-3,
+                                            prefix = "$")) + 
+  theme_void()
+```
+
+```{r}
+summary(bern$estimate)
+```
+
+```{r}
+pal <- colorNumeric(palette = "Greens",
+                    domain = bern$estimate)
+bbb <- st_bbox(bern)
+```
+
+```{r}
+#| eval: false
+leaflet(bern %>% st_transform(4326)) |> 
+  addTiles() |> 
+  addPolygons(
+      stroke = F,
+      fillOpacity = 0.75,
+      color = ~pal(bern$estimate),
+      label = ~paste0("Med. Val. (dollars): ", prettyNum(estimate, big.mark = ","))
+  ) |> 
+  addLegend("bottomright", pal = pal, values = ~estimate,
+    title = "Est. Med. House Value 2023",
+    labFormat = labelFormat(prefix = "$", transform = function(x){x/1000}, suffix = "K"),
+    opacity = 1
+  ) |> 
+  fitBounds(-106.7, 35, -106.49, 35.225) |> 
+  addMiniMap(tiles = providers$Esri.WorldStreetMap)
+```
+
+```{r}
+bern_f <- bern |> filter(complete.cases(estimate))
+nb <- poly2nb(bern_f, queen = TRUE)
+nbw <- nb2listw(nb, style = "W")
+
+gmoran <- moran.test(bern_f$estimate, nbw,
+                     alternative = "greater")
+gmoran
+```
+
+```{r}
+gmoranMC <- moran.mc(bern_f$estimate, nbw, nsim = 999)
+gmoranMC
+```
+
+```{r bern-house-val-sac-2}
+hist(gmoranMC$res)
+```
+
+```{r bern-house-val-sac-3}
+moran.plot(bern_f$estimate, nbw)
+```
+
+## Local Moran
+
+```{r}
+lmoran <- localmoran(bern_f$estimate, nbw, 
+                     alternative = "greater")
+head(lmoran)
+```
+
+```{r}
+bern_f$lmI <- lmoran[, "Ii"] # local Moran's I
+bern_f$lmZ <- lmoran[, "Z.Ii"] # z-scores
+# p-values corresponding to alternative greater
+bern_f$lmp <- lmoran[, "Pr(z > E(Ii))"]
+```
+
+```{r bern-house-val-sac-4}
+ggplot(bern_f, aes(fill = estimate)) +
+  geom_sf() +
+  labs(title = "Bernalillo County Median House Value", 
+       caption = "Data Source US Census Bureau 5-year ACS", 
+       fill = "ACS estimate") +
+  coord_sf(xlim = c(-106.7, -106.49), ylim = c(35.0, 35.225)) +
+  scale_fill_distiller(palette = "BuGn",
+                       direction = 1,
+                       labels = unit_format(unit = "K", scale = 1e-3,
+                                            prefix = "$")) + 
+  theme_void()
+```
+
+```{r}
+library(classInt)
+breaks_lmI <- classIntervals(c(min(bern_f$lmI) - .00001,
+                              bern_f$lmI), n = 5, style = "quantile")
+breaks_lmI$brks
+```
+
+```{r}
+library(stringr)
+library(purrr)
+library(readr)
+bern_lmI <- mutate(bern_f, 
+                   lmIcat = cut(bern_f$lmI, breaks_lmI$brks, 
+                                dig.lab = 4))
+ranges <- bern_lmI$lmIcat %>% 
+  as.character()
+labels <- map(ranges, 
+              \(x) str_match(x, "(\\-?\\d+\\.\\d+).*(\\d+\\.\\d+)"))
+
+labels <- map_chr(labels, \(x) x[1])
+labels <- map_chr(labels, \(x) str_replace(x, ",", " - "))
+bern_f$labels <-labels
+```
+
+```{r bern-house-val-sac-5}
+ggplot(bern_lmI) +
+  geom_sf(aes(fill = lmIcat)) +
+  labs(title = "Bernalillo County Median House Value", 
+       caption = "Data Source US Census Bureau 5-year ACS", 
+       fill = "Local Moran's I") +
+  scale_fill_brewer(labels = labels, palette = "BuGn") +
+  coord_sf(xlim = c(-106.7, -106.49), ylim = c(35.0, 35.225)) +
+  theme(legend.position = "right") +
+  theme_void()
+```
+
+```{r bern-house-val-sac-6}
+bern_f <- mutate(
+  bern_f,
+  zcat = ifelse(lmZ < 1.65, "Less than 1.65", "1.65 or more"))
+ggplot(bern_f, aes(fill = zcat)) +
+  geom_sf() +
+  labs(title = "Bernalillo County Median House Value", 
+       caption = "Data Source US Census Bureau 5-year ACS", 
+       fill = "Z-score") +
+  coord_sf(xlim = c(-106.7, -106.49), ylim = c(35.0, 35.225)) +
+  scale_fill_manual(values = c("lightblue", "lightgreen")) + 
+  theme_void()
+```
+
+```{r bern-house-val-sac-7}
+bern_f <- mutate(
+  bern_f,
+  pcat = ifelse(lmp < 0.05, "Less than 0.05", "0.05 or more"))
+ggplot(bern_f, aes(fill = pcat)) +
+  geom_sf() +
+  labs(title = "Bernalillo County Median House Value", 
+       caption = "Data Source US Census Bureau 5-year ACS", 
+       fill = "p-value") +
+  coord_sf(xlim = c(-106.7, -106.49), ylim = c(35.0, 35.225)) +
+  scale_fill_manual(values = c("lightblue", "lightgreen")) + 
+  theme_void()
+```
+
+In this two-sided test, z-score values lower than –1.96 indicate negative spatial autocorrelation, and z-score values greater than 1.96 indicate positive spatial autocorrelation. 
+
+```{r bern-house-val-sac-8}
+bern_f <- bern_f %>% mutate(
+  SAC = case_when(lmZ < -1.96 ~ "Negative SAC",
+                  lmZ >= -1.96 & lmZ <= 1.96 ~ "No SAC",
+                  TRUE ~ "Positive SAC")
+)
+```
+
+```{r bern-house-val-sac-9}
+ggplot(bern_f, aes(fill = SAC)) +
+  geom_sf() +
+  labs(title = "Bernalillo County Median House Value", 
+       caption = "Data Source US Census Bureau 5-year ACS", 
+       fill = "Local Moran's I") +
+  coord_sf(xlim = c(-106.7, -106.49), ylim = c(35.0, 35.225)) +
+  scale_fill_manual(values = c("blue", "white", "red")) + 
+  theme_void()
+```
+
+# Clusters
+
+```{r}
+lmoran <- localmoran(bern_f$estimate, nbw,
+                     alternative = "two.sided")
+head(lmoran)
+```
+
+```{r bern-house-val-sac-10}
+bern_f$lmp <- lmoran[, 5]
+mp <- moran.plot(as.vector(scale(bern_f$estimate)), nbw)
+```
+
+```{r}
+head(mp)
+```
+
+```{r}
+bern_f$quadrant <- NA
+bern_f[(mp$x >= 0 & mp$wx >= 0) & 
+         (bern_f$lmp <= 0.05), 
+       "quadrant"] <- 1
+bern_f[(mp$x <= 0 & mp$wx <= 0) & (bern_f$lmp <= 0.05), 
+       "quadrant"]<- 2
+# high-low
+bern_f[(mp$x >= 0 & mp$wx <= 0) & (bern_f$lmp <= 0.05), 
+       "quadrant"]<- 3
+# low-high
+bern_f[(mp$x <= 0 & mp$wx >= 0) & (bern_f$lmp <= 0.05), 
+       "quadrant"]<- 4
+# non-significant
+bern_f[(bern_f$lmp > 0.05), "quadrant"] <- 5
+
+bern_f <- bern_f %>% 
+  mutate(
+    quad_labs = case_when(
+      quadrant == 1 ~ "High-High",
+      quadrant == 2 ~ "Low-Low",
+      quadrant == 3 ~ "High-Low",
+      quadrant == 4 ~ "Low-High",
+      TRUE ~ "Non-significant"
+    )
+  )
+bern_f[, c("quadrant","quad_labs")]
+bern_f$quad_labs <- factor(bern_f$quad_labs,
+       levels = c("High-High", "Low-Low", "High-Low",
+                  "Low-High", "Non-significant"))
+```
+
+
+
+```{r bern-house-val-sac-11}
+ggplot(bern_f, aes(fill = quad_labs)) +
+  geom_sf() +
+  labs(title = "Bernalillo County Median House Value", 
+       caption = "Data Source US Census Bureau 5-year ACS", 
+       fill = "Local Moran's I") +
+  coord_sf(xlim = c(-106.7, -106.49), ylim = c(35.0, 35.225)) +
+  scale_fill_viridis_d() +
+  theme_void()
+```
+
