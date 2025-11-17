@@ -1,0 +1,92 @@
+---
+title: "dodgr"
+format: html
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+```{r}
+library(dodgr)
+bb <- osmdata::getbb("albuquerque nm")
+npts <- 1000
+xy <- apply(bb, 1, \(x) min(x) + runif(npts) * diff(x))
+bb; head(xy)
+```
+
+```{r}
+# net <- dodgr_streetnet(bb)
+# net <- weight_streetnet(net, wt_profile = "foot")
+```
+
+```{r}
+# dodgr_save_streetnet(net, "data/abq_streetnet.Rds")
+net <- dodgr_load_streetnet("data/abq_streetnet.Rds")
+```
+
+
+
+```{r}
+system.time(
+  d <- dodgr_dists(net, from = xy, to = xy)
+)
+dim(d); range (d, na.rm = T)
+```
+
+```{r}
+dim(d); range (d, na.rm = T)
+```
+
+```{r}
+library(ggmap)
+library(osmdata)
+map_toner <- get_stadiamap(getbb('albuquerque'), type = "stamen_toner_light")
+ggmap(map_toner)
+```
+```{r}
+map <- get_googlemap("albuquerque nm", zoom = 12)
+Sys.getenv()
+```
+
+```{r}
+#| eval: false
+library(basemaps)
+set_defaults(map_service = "esri", map_type = "world_topo_map")
+```
+
+```{r}
+bb
+```
+
+```{r}
+data(ext)
+ext
+```
+
+```{r}
+library(sf)
+library(sp)
+ext <- as(raster::extent(bb["x", "min"], bb["x", "max"],
+                  bb["y", "min"], bb["y", "max"]), 
+   "SpatialPolygons") %>% 
+  st_as_sf() %>% 
+  st_set_crs(4326)
+```
+
+```{r}
+library(ggplot2)
+net_sf <- dodgr_to_sf(net)
+class(net_sf)
+ggplot(net_sf) +
+  geom_sf()
+```
+
+```{r}
+net <- dodgr_deduplicate_graph(net)
+net_sf <- dodgr_to_sf(net)
+ggplot(net_sf) +
+  geom_sf()
+```
+
+
