@@ -1,0 +1,278 @@
+---
+title: "13-Spatial Interpolation Methods"
+format: gfm
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+
+```{r}
+#| message: false
+library(spData)
+library(sf)
+library(terra)
+library(spdep)
+library(tmap)
+library(viridis)
+library(ggplot2)
+```
+
+# Spatial prediction of property prices
+
+## Preparation
+
+To illustrate the spatial interpolation methods, we use the properties data of the spData package (Bivand, Nowosad, and Lovelace 2022) which contains the price of apartments in Athens, Greece, in 2017. properties is a sf object that contains several columns including price with the apartments’ price in Euros, prpsqm with the apartments’ price per square meter.
+
+```{r}
+d <- properties
+str(d)
+```
+
+```{r}
+d$vble <- d$prpsqm
+```
+
+The object depmunic contains the boundaries of the administrative divisions of Athens. 
+
+```{r}
+str(depmunic)
+```
+
+```{r}
+map <- st_union(depmunic) %>% st_sf()
+```
+
+```{r spat-spat-int-1}
+tmap_mode("plot")
+tm_shape(map) + 
+  tm_polygons(fill_alpha = 0.3) +
+  tm_shape(d) +
+  tm_dots("vble", 
+          tm_scale_intervals(n = 5, style = "quantile", values = "viridis"),
+          fill.legend = tm_legend("Price per sq meter", 
+                                  position = tm_pos_in("right", "top")))
+```
+
+Prediction locations
+
+```{r}
+grid <- rast(map, nrows = 100, ncols = 100)
+grid
+```
+
+```{r}
+xy <- xyFromCell(grid, 1:ncell(grid))
+```
+
+We create a sf object called coop with the prediction locations.
+
+```{r spat-spat-int-2}
+coop <- as.data.frame(xy) %>% 
+  st_as_sf(coords = c("x", "y"), crs = st_crs(map)) %>% 
+  st_filter(map)
+qtm(coop)
+```
+
+## Closest observation
+
+Using a voronoi plot.
+
+```{r spat-spat-int-3}
+v <- voronoi(x = vect(d), bnd = map)
+plot(v)
+points(vect(d), cex = 0.5)
+```
+
+Prediction
+
+```{r spat-spat-int-4}
+v <- st_as_sf(v)
+tm_shape(v) +
+  tm_fill("vble", 
+          tm_scale_intervals(n = 5, style = "equal", values = "viridis"),
+          fill.legend = tm_legend("Price per sq meter", 
+                                  position = tm_pos_in("right", "top")),
+          fill_alpha = 0.6)
+```
+
+```{r spat-spat-int-5}
+tm_shape(v) +
+  tm_fill("vble",
+          tm_scale_intervals(n = 5, style = "quantile", values = "viridis"),
+          fill.legend = tm_legend("Price per sq meter", 
+                                  position = tm_pos_in("right", "top")),
+          fill_alpha = 0.6)
+```
+
+Get predicted values at coop points
+
+```{r spat-spat-int-6}
+resp <- st_intersection(v, coop)
+resp$pred <- resp$vble
+
+pred <- rasterize(resp, grid, field = "pred", fun = "mean")
+tm_shape(pred) +
+  tm_raster(col_alpha = 0.6, 
+            col.scale = tm_scale_intervals(n = 5, style = "quantile",
+                                           values = "viridis"))
+```
+
+## Inverse Distance Weighting (IDW)
+
+We can apply the IDW method with the gstat() function of gstat and the following arguments:
+
+- formula: vble ~ 1 to have an intercept only model,
+- nmax: number of neighbors is set equal to the total number of locations,
+- idp: inverse distance power is set to idp = 1 to have weights with β=1
+
+```{r spat-spat-int-7}
+library(gstat)
+res <- gstat(formula = vble ~ 1, locations = d,
+             nmax = nrow(d),
+             set = list(idp = 1))
+resp <- predict(res, coop)
+resp$x <- st_coordinates(resp)[,1]
+resp$y <- st_coordinates(resp)[,2]
+resp$pred <- resp$var1.pred
+
+pred <- rasterize(resp, grid, field = "pred", fun = "mean")
+tm_shape(pred) +
+  tm_raster(col_alpha = 0.6, 
+            col.scale = tm_scale_intervals(n = 5, style = "quantile",
+                                           values = "viridis"))
+```
+
+## Nearest neighbors
+
+Here, we consider the number of closest sampled locations equal to 5 by setting nmax = 5. Unlike the IDW method, in the nearest neighbors approach locations further away from the location where we wish to predict are assigned the same weights. Therefore, the inverse distance power idp is set equal to zero so all the neighbors are equally weighted.
+
+```{r spat-spat-int-8}
+res <- gstat(formula = vble ~ 1, locations = d,
+             nmax = 5, set = list(idp = 0))
+resp <- predict(res, coop)
+resp$x <- st_coordinates(resp)[,1]
+resp$y <- st_coordinates(resp)[,2]
+resp$pred <- resp$var1.pred
+
+pred <- rasterize(resp, grid, field = "pred", fun = "mean")
+tm_shape(pred) +
+  tm_raster(col_alpha = 0.6, 
+            col.scale = tm_scale_intervals(n = 5, style = "quantile",
+                                           values = "viridis"))
+```
+
+# Ensemble
+
+Closest observation (Voronoi)
+
+```{r}
+v <- voronoi(x = vect(d), bnd = map) %>% 
+  st_as_sf()
+p1 <- st_intersection(v, coop)$vble
+```
+
+IDW
+
+```{r}
+gs <- gstat(formula = vble ~ 1, locations = d, 
+            nmax = nrow(d),
+            set = list(idp = 1))
+p2 <- predict(gs, coop)$var1.pred
+```
+
+Nearest Neighbors
+
+```{r}
+nn <- gstat(formula = vble ~ 1, locations = d, nmax = 5,
+            set = list(idp = 0))
+p3 <- predict(nn, coop)$var1.pred
+```
+
+Ensemble
+
+```{r}
+weights <- c(1/3, 1/3, 1/3)
+p4 <- p1 * weights[1] + p2 * weights[2] + p3 * weights[3]
+```
+
+```{r spat-spat-int-9}
+resp <- data.frame(
+  x = st_coordinates(coop)[,1],
+  y = st_coordinates(coop)[,2],
+  pred = p4
+)
+resp <- st_as_sf(resp, coords = c("x", "y"), crs = st_crs(map))
+
+pred <- rasterize(resp, grid, field = "pred", fun = "mean")
+tm_shape(pred) +
+  tm_raster(col_alpha = 0.6, 
+            col.scale = tm_scale_intervals(n = 5, style = "quantile",
+                                           values = "viridis"))
+```
+
+## Cross-validation
+
+```{r}
+#| warning: false
+#| message: false
+set.seed(123)
+
+RMSE <- function(observed, predicted) {
+  sqrt(mean((observed - predicted)^2))
+}
+
+kf <- dismo::kfold(nrow(d), k = 5)
+
+rmse_closest <- rep(NA, 5)
+rmse_idw <- rep(NA, 5)
+rmse_nn <- rep(NA, 5)
+rmse_ensemble <- rep(NA, 5)
+
+for(k in 1:5) {
+  test <- d[kf == k, ]
+  train <- d[kf != k, ]
+  
+  v <- voronoi(x = vect(train), bnd = map) %>% 
+    st_as_sf()
+  p1 <- st_intersection(v, test)$vble
+  rmse_closest[k] <- RMSE(test$vbl, p1)
+  
+  gs <- gstat(formula = vble ~ 1, locations = train,
+              nmax = nrow(train), set = list(idp = 1))
+  p2 <- predict(gs, test)$var1.pred
+  rmse_idw[k] <- RMSE(test$vble, p2)
+  
+  nn <- gstat(formula = vble ~ 1, locations = train,
+            nmax = 5, set = list(idp = 0))
+  p3 <- predict(nn, test)$var1.pred
+  rmse_nn[k] <- RMSE(test$vble, p3)
+  
+  w <- 1/c(rmse_closest[k], rmse_idw[k], rmse_nn[k])
+  weights <- w/sum(w)
+  p4 <- p1 * weights[1] + p2 * weights[2] + p3 * weights[3]
+  rmse_ensemble[k] <- RMSE(test$vble, p4)
+}
+```
+
+```{r}
+cv <- data.frame(closest_obs = rmse_closest, IDW = rmse_idw,
+           nearest_neig = rmse_nn, ensemble = rmse_ensemble)
+cv
+```
+
+```{r}
+apply(cv, 1, mean)
+```
+
+```{r}
+cv <- data.frame(closest_obs = mean(rmse_closest), 
+                 IDW = mean(rmse_idw),
+                 nearest_neig = mean(rmse_nn), 
+                 ensemble = mean(rmse_ensemble))
+cv
+```
+
+
+
