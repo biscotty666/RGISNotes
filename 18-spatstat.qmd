@@ -1,0 +1,117 @@
+---
+title: "spatstat package for spatial point patterns"
+format: gfm
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+
+```{r}
+#| message: false
+library(spatstat)
+library(sf)
+library(rnaturalearth)
+```
+
+# Careating spatial point patterns
+
+Create the observation window
+
+```{r}
+win <- owin(xrange = c(0,1), yrange = c(0,2))
+win; str(win)
+```
+
+```{r spatstat-package-1}
+plot(win)
+```
+
+Simulate 100 randome points in the window
+
+```{r}
+x <- runif(100, 0, 1)
+y <- runif(100, 0, 2)
+X <- ppp(x = x, y = y, window = win)
+X
+```
+
+```{r spatstat-package-2}
+plot(X); axis(1); axis(2)
+```
+
+```{r}
+Window(X)
+```
+
+Alternatively
+
+```{r spatstat-package-3}
+X2 <- runifpoint(100, win)
+plot(X2); axis(1); axis(2)
+```
+
+Adding associated information (marks)
+
+Assign a numeric value to each event
+
+Two alternatives:
+
+```{r spatstat-package-4}
+marks(X) <- 1:npoints(X)
+X <- X %mark% 1:npoints(X)
+plot(X)
+```
+
+Test if points lie in a given window
+
+```{r spatstat-package-5}
+win <- owin() # a unit window
+marks(X) <- inside.owin(X, w = win)
+plot(X); axis(1); axis(2)
+```
+
+# Converting between ppp and sf objects
+
+## ppp to sf
+
+Here, we show how to use the st_as_sf() function from sf to transform the longleaf data from sptatstat which contains the locations and sizes of longleaf pine trees, from ppp to sf class.
+
+```{r}
+X <- longleaf
+str(X)
+```
+
+```{r spatstat-package-6}
+plot(X)
+```
+
+
+```{r}
+d <- data.frame(x = X$x, y = X$y, m = marks(X)) %>% 
+  st_as_sf(coords = c("x", "y"))
+```
+
+## sf to ppp
+
+```{r spatstat-package-7}
+X <- as.ppp(st_coordinates(d), st_bbox(d))
+X <- X %mark% d$m
+plot(X)
+```
+
+Here, we show an example on how to create a spatial point pattern with the boundary of Brazil as observation window.
+
+```{r spatstat-package-8}
+map <- ne_countries(type = "countries", country = "Brazil",
+                    scale = "medium", returnclass = "sf") %>% 
+  st_transform(crs = "EPSG:29172")
+win <- as.owin(map)
+X <- runifpoint(100, win = win)
+plot(X)
+```
+
+
+
+
