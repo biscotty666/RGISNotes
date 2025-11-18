@@ -1,0 +1,134 @@
+---
+title: "Kriging - Zinc Concentrations"
+format: gfm
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+
+```{r}
+#| message: false
+library(sp)
+library(sf)
+library(gstat)
+library(mapview)
+library(viridis)
+library(ggplot2)
+library(plotly)
+```
+
+# Predictions of zinc concentrations
+
+## Data
+
+```{r}
+data("meuse")
+data("meuse.grid")
+meuse <- st_as_sf(meuse, coords = c("x", "y"), crs = 28992)
+meuse.grid <- st_as_sf(meuse.grid, coords = c("x", "y"),
+                       crs = 28992)
+```
+
+```{r kriginc-zinc-1}
+breaks_m <- classInt::classIntervals(
+  c(min(meuse$zinc) - .00001, meuse$zinc),
+  n = 7, style = "quantile"
+)
+meuse$zinc_cat <- cut(meuse$zinc, breaks_m$brks)
+
+ggplot(meuse, aes(color = zinc_cat)) +
+    ggspatial::annotation_map_tile(      
+    type = "osm",
+    cachedir = "maps/",
+    zoomin = -1) +
+  geom_sf() +
+  scale_color_viridis_d() +
+  coord_sf(crs = st_crs(meuse), datum = st_crs(meuse)) +
+  theme_minimal()
+```
+
+```{r kriginc-zinc-2}
+ggplot(meuse.grid) +
+    ggspatial::annotation_map_tile(      
+    type = "osm",
+    cachedir = "maps/",
+    zoomin = -1) +
+  geom_sf(color = "blue", alpha = 0.3) +
+  coord_sf(crs = st_crs(meuse.grid), datum = st_crs(meuse.grid)) +
+  theme_minimal()
+```
+
+## Variogram cloud
+
+The variogram cloud shows half of all possible squared differences of data observation pairs against their separation distance h. The variogram() function of gstat can be used to calculate the variogram cloud. In variogram(), we set argument object to z ~ 1 if we wish to obtain the variogram for data z, or to a formula of a linear model with covariates if we wish the variogram for the residuals.
+
+```{r kriginc-zinc-3}
+vc <- variogram(log(zinc) ~ 1, meuse, cloud = T)
+plot(vc)
+```
+
+## Sample variogram
+
+```{r kriginc-zinc-4}
+v <- variogram(log(zinc) ~ 1, meuse)
+plot(v)
+```
+
+## Fitted variogram
+
+```{r}
+vgm()
+```
+
+```{r kriginc-zinc-5}
+show.vgms(par.strip.text = list(cex = 0.75))
+```
+
+
+```{r kriginc-zinc-6}
+vinitial <- vgm(psill = 0.5, model = "Sph",
+                range = 900, nugget = 0.1)
+plot(v, vinitial, cutoff = 1000, cex = 1.5)
+```
+
+```{r}
+fv <- fit.variogram(object = v,
+                    model = vgm(psill = 0.5, model = "Sph",
+                                range = 900, nugget = 0.1))
+fv
+```
+
+```{r kriginc-zinc-7}
+plot(v, fv, cex = 1.5)
+```
+
+## Kriging - predictions
+
+```{r}
+k <- gstat(formula = log(zinc) ~ 1, data = meuse, model = fv)
+kpred <- predict(k, meuse.grid)
+```
+
+```{r kriginc-zinc-8}
+library(patchwork)
+p1 <- ggplot() +
+  geom_sf(data = kpred, aes(color = var1.pred)) +
+  geom_sf(data = meuse, alpha = 0.5) +
+  scale_color_viridis(name = "log(zinc)") +
+  theme_bw()
+
+p2 <- ggplot() +
+  geom_sf(data = kpred, aes(color = var1.var)) +
+  geom_sf(data = meuse, alpha = 0.5) +
+  scale_color_viridis(name = "variance") +
+  theme_bw()
+
+p1 + p2
+```
+
+
+
+
+

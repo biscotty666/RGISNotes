@@ -43,6 +43,7 @@
               dismo
               dodgr
               elevatr
+              fields
               flowmapblue
               forcats
               gapminder
@@ -67,6 +68,7 @@
               pagedown
               patchwork
               plotly
+              prettymapr
               raster
               rcartocolor
               rmapshaper
@@ -77,6 +79,7 @@
               shiny
               sp
               spData
+              spatstat
               spdep
               terra
               thematic
