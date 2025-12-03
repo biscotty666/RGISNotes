@@ -1,6 +1,6 @@
 {
   description = "A basic flake with a shell";
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/25.05";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/25.11";
   inputs.systems.url = "github:nix-systems/default";
   inputs.flake-utils = {
     url = "github:numtide/flake-utils";
@@ -14,6 +14,16 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         
+      rspat= pkgs.rPackages.buildRPackage {
+        name = "rspatial";
+        src = pkgs.fetchFromGitHub{
+          owner = "rspatial";
+          repo = "rspat";
+          rev = "a423fb341fedad728900bd720efe305008eb16fd";
+          sha256 = "06qdpm40fv65w15kc0n9jpxzn1zb2j2f85lybkq7knkrrb8qigaf";
+        };
+   propagatedBuildInputs = with pkgs.rPackages; [bslib evaluate terra jsonlite knitr stringr tinytex yaml xfun];
+      };
    #    r-inla = pkgs.rPackages.buildRPackage {
    #      name = "R-INLA";
    #      src = pkgs.fetchFromGitHub{
@@ -32,6 +42,7 @@
             R
             chromium
             pandoc
+            rspat
             # r-inla
             texlive.combined.scheme-full
             rstudio
@@ -40,6 +51,7 @@
               SpatialEpi
               basemaps
               chirps
+              climate
               dismo
               dodgr
               elevatr
@@ -50,10 +62,12 @@
               geoR
               geodata
               geodist
+              ggforce
               ggspatial
               ggiraph
               ggmap
               ggpattern
+#              ggvoronoi
               gstat
               htmlwidgets
               janitor
@@ -76,6 +90,7 @@
               rnaturalearthdata
               scales
               sf
+#              sfext
               shiny
               sp
               spData
